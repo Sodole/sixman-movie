@@ -1,0 +1,6 @@
+[develop] 파일 생성
+
+[version]
+1.0.0.
+
+[contents]
