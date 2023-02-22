@@ -6,6 +6,7 @@ var logger = require('morgan');
 
 var indexRouter = require('./routes/index');
 var loginRouter = require('./routes/login');
+var firebaseRouter = require('./routes/firebase');
 
 var app = express();
 
@@ -16,6 +17,7 @@ app.use(cookieParser());
 
 app.use('/', indexRouter);
 app.use('/login', loginRouter);
-// app.use('/users', usersRouter);
+app.use('/fire', firebaseRouter);
+
 
 module.exports = app;
