@@ -25,27 +25,27 @@ function getYesterday(){
 };
 
 
-router.get('/movie', function(req,res,next){
-  reqURL = 'http://www.kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json'
-  const kofisApiKey = process.env.KOFIC_API_KEY
-  const targetDt = getYesterday()
-  const url = `${reqURL}?key=${kofisApiKey}&targetDt=${targetDt}`;
-  const ref = db.ref(`dailyrank/${targetDt}`);
+// router.get('/movie', function(req,res,next){
+//   reqURL = 'http://www.kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json'
+//   const kofisApiKey = process.env.KOFIC_API_KEY
+//   const targetDt = getYesterday()
+//   const url = `${reqURL}?key=${kofisApiKey}&targetDt=${targetDt}`;
+//   const ref = db.ref(`dailyrank/${targetDt}`);
 
 
-  fetch(url).then(res => res.json())
-  .then((result)=> result['boxOfficeResult']['dailyBoxOfficeList']).catch(console.log)
-  .then((data) => {
-    const result = {};
-    for (let i = 0; i < data.length; i++) {
-    result[data[i].rank] = data[i].movieNm;
-    }
-    return result
-  }).then((data) =>{
-  ref.set(data);
-  res.send(data)
-  })
-});
+//   fetch(url).then(res => res.json())
+//   .then((result)=> result['boxOfficeResult']['dailyBoxOfficeList']).catch(console.log)
+//   .then((data) => {
+//     const result = {};
+//     for (let i = 0; i < data.length; i++) {
+//     result[data[i].rank] = data[i].movieNm;
+//     }
+//     return result
+//   }).then((data) =>{
+//   ref.set(data);
+//   res.send(data)
+//   })
+// });
 
 function get_day(day){
   const daily = getYesterday()

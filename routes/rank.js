@@ -3,9 +3,7 @@ const router = express.Router();
 const Rank = require("../controllers/rank")
 
 /** rank관련 routing */
-router.get('/', Rank.getRank);
-
-router.get('/:daily?', Rank.findRank);
+router.get('/:daily?', Rank.readRank);
 
 // router.get('/:daily/:rank?', Rank.findrank);
 
