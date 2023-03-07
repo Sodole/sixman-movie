@@ -3,7 +3,7 @@ const router = express.Router();
 const Movie = require("../controllers/movie");
 
 
-router.get("/",Movie.getmovie)
+router.get("/:daily/:rank?",Movie.readMovie)
   // User 데이터 모델과 연결된 객체 생성 후 req.body 삽입
   // const rank = new Rank(req.body);
 

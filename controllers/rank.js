@@ -114,6 +114,7 @@ const createRank = async(date) => {
     return dailyRank
     }
    
+    
 
 /**
  * 가공한 데이터를 dailyrank에 저장해주는 함수
