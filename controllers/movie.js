@@ -6,7 +6,11 @@ const fetch = require("node-fetch");
 const { model } = require("mongoose");
 require("dotenv").config(); 
 moment.tz.setDefault('Asia/Seoul')
+const conRank = require("./rank")
 
+////////
+// 날짜 관련함수
+////////
 
 
 /**
@@ -48,12 +52,16 @@ const checkDaily = (req) => {
 }
 
 
-// 요청Url관련 함수들
+
+////////
+// 요청Url 관련 함수
+////////
+
 
 /**
  * kobis(한국영상진흥원) 요청 Url 함수(key포함)
  * @param {number} date YYYYMMDD 형태의 8자리
- * @returns 요청일자를 적용한 Url 반환
+ * @returns 요청영화코드를 적용한 Url 반환
  */
 const getKobisUrl = (movieCd) => {
     const movieCode = movieCd
@@ -76,6 +84,11 @@ const getRank = async (date) => {
     }
 
 
+
+////////
+// 기존 db관련 함수
+////////
+
 /**
  * dailyRank의 code를 하나의 배열로 만들어서 되돌려주는 함수
  * @param {*} date YYYYMMDD 형태의 8자리
@@ -83,12 +96,22 @@ const getRank = async (date) => {
  */
 const getRankCode = async (date) =>{
     const data = await getRank(date)
+    if(data){
     let ranking = data["ranking"]
     let rankCdSet = []
     for(let i =0; i <10; i++){
         rankCdSet.push(ranking[i])
     }
     return rankCdSet
+    }else{
+        const YesterDayData = await getRank(date-1)
+        let ranking = YesterDayData["ranking"]
+        let rankCdSet = []
+        for(let i =0; i <10; i++){
+            rankCdSet.push(ranking[i])
+        }
+        return rankCdSet
+    }
 }
 
 
@@ -107,12 +130,9 @@ const getMovieUrl = async(date) =>{
 }
 
 
-/**
- * 배열이 있는지 확인하는 함수
- */
-const confirmMoviedb =()=> {
-    return 
-}
+////////
+// kobis 데이터 요청관련 함수
+////////
 
 /**
  * 일자에 맞춰 kobis에 요청한 각 순번에 대한 데이터를 받아오는 함수
@@ -130,39 +150,53 @@ const getMovieData = async(num, date = today() ) =>{
 
 
 
-
+////////
+// theMovie DataBase 관련 함수
+////////
 /**
- * naver에서 movie정보를 받아오는 함수
- * @param {*} title 영화제목을 이름으로 넣는다
- * @returns 네이버의 영화정보를 출력한다.
+ * TMDB(themovie) 요청 Url 함수(key포함)
+ * @param {String} title 영화title
+ * @returns 요청영화title를 적용한 Url 반환
  */
-const getNaMovieData = async(title) =>{
-    const client_id = process.env.client_id
-    const client_secret = process.env.client_secret
-    const reqTitle = title
-    const api_url = `https://openapi.naver.com/v1/search/movie.json?query=${reqTitle}`
-    const response = await fetch(api_url, {
-        method: "GET",
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Naver-Client-Id':client_id,
-            'X-Naver-Client-Secret': client_secret
-        },
-    })
-    const data = response.json()
-    return data
+const getTMDBUrl = (title) => {
+    let query = title
+    let reqURL = 'https://api.themoviedb.org/3/search/movie'
+    const TMDB_API_KEY = process.env.TMDB_API_KEY
+    const tmdbUrl = `${reqURL}?api_key=${TMDB_API_KEY}&query=${query}&language=ko-KR`;
+    return tmdbUrl
 }
 
 
 /**
- * 받아온정보를 parsing해서 원하는 형태로 가공한다.
- * @param {*} title 
+ * 일자에 맞춰 kobis에 요청한 각 순번에 대한 데이터를 받아오는 함수
+ * @param {*} num 원하는 순번을 입력한다
+ * @param {*} date YYYYMMDD 형태의 8자리
+ * @returns fetch의 결과값
  */
-const getPosterdata = async(title) =>{
-    const data = await getNaMovieData(title)
-    const result = {
-        image : data["items"][0]["image"],
-        userRank : data["items"][0]["userRating"]
+const getTMDBData = async(title) =>{
+    const movieUrl = getTMDBUrl(title)
+    const response = await fetch(movieUrl)
+    const result = response.json()
+    return result
+}
+
+
+/**
+ * 받아온 tmdb정보를 parsing해서 원하는 형태로 가공한다.
+ * tmdb api영화정보와 kobis의 영화 정보가 일치하는지 확인하는 과정을 거쳐 정확한 자료를 받아오도록 한다.
+ * @param {*} title 
+ * @return 영화 포스터 URL
+ */
+const getTMDBDataSet = async(title) =>{
+    const data = await getTMDBData(title)
+    const tmdbDummy = data["results"][0]
+    let posterPath = tmdbDummy["poster_path"]
+    let result = {
+        tmdbID:tmdbDummy["id"],
+        tmdbOverview:tmdbDummy["overview"],
+        genreIds:tmdbDummy["genre_ids"],
+        voteAverage :tmdbDummy["vote_average"],
+        posterUrl : `https://image.tmdb.org/t/p/w500/${posterPath}`
     }
     return result
 }
@@ -178,9 +212,10 @@ const createMovieData = async(num, date = today()) =>{
     const movieData = await getMovieData(num, date)
     const finalData = movieData["movieInfoResult"]["movieInfo"]
     const title = finalData["movieNm"]
-    const naverData = await getPosterdata(title)
+    let updateDt = getDate(date)
+    const tmdbDataDummy = await getTMDBDataSet(title)
     let movieSet = {
-        movieCd : finalData["movieCd"],
+        movieCode : finalData["movieCd"],
         koTitle : finalData["movieNm"],
         enTitle : finalData["movieNmEn"],
         enOriginTitle : finalData["movieNmOg"],
@@ -191,11 +226,16 @@ const createMovieData = async(num, date = today()) =>{
         directors : finalData["directors"],
         genreNm : finalData["genres"],
         actor : finalData["actors"],
-        posterUrl : naverData["image"],
-        userRating : naverData["userRank"]
+        tmdbID : tmdbDataDummy["tmdbID"],
+        tmdbOverview : tmdbDataDummy["tmdbOverview"],
+        genreIds : tmdbDataDummy["genreIds"],
+        userRating : tmdbDataDummy["voteAverage"],
+        posterUrl : tmdbDataDummy["posterUrl"],
+        updateDate : updateDt
     }
     return movieSet
 }
+
 
 
 /**
@@ -210,185 +250,89 @@ const saveMovie = async(num, date = today()) =>{
 }
 
 
+/**
+ * movieCode를 얻는 함수
+ * @param {*} num  n번째
+ * @param {*} date YYYYMMDD 형태의 8자리
+ * @returns KobisMovieCode
+ */
+const getMovieCode = async(num,date) => {
+    const rankCode = await getRankCode(date)
+    const movieCode = rankCode[num]["movieCode"]
+    return movieCode
+}
+
+
+/**
+ * Movie에 원하는 일자의 데이터가 있는지 확인한다.
+ * 없을시 null값을 반환한다.
+ * @param {*} date 
+ */
+const checkMovie = async(num, date) => {
+    const movieCode = await getMovieCode(num,date)
+    const rankResult = await Movie.Movie.exists({movieCode : {$eq:movieCode}})
+    return rankResult    
+    }
+
+
+
+/**
+ * Movie를 한개 읽어오는 함수
+ * @param {*} movieCode YYYYMMDD 형태의 8자리
+ * @returns code에 맞는 데이터 반환 
+ */
+const getMovie = async (num, date) => {
+    const movieCode = await getMovieCode(num,date)   
+    const rankResult = await Movie.Movie.findOne({ movieCode : movieCode }, {_id:false, __v:false});
+        return rankResult
+    }
+
+
 
 const readMovie = async(req, res) => {
     const {daily, rank} = req.params
-    try{
-        let data = await createMovieData(rank, daily)
-        if(checkDaily(daily)){
-            try{
-                if(data == null){
-                    data = await createMovieData(date)
+    if(checkDaily(daily)){
+        if(rank < 10){
+        const checkMovies = await checkMovie(rank, daily)
+            if(checkMovies){
+                const data = await getMovie(rank, daily)
                     res.json(data)
+                
+                const userRating = data["userRating"]
+                const movieCode = data["movieCode"]
+                const newData = await createMovieData(rank,daily)
+                if(userRating != newData["userRating"]){
+                    try{
+                        Movie.Movie.replaceOne({movieCode:{$eq:movieCode}}, newData)
+                    }
+                    catch{
+                    }
                 }
-                else{
-                res.json(data)
             }
-            }
-            catch(err){
-                console.log(err);
-                res.send("server errorcode : 500");
+            else{
+                try{
+                const data = await createMovieData(rank,daily)
+                await saveMovie(rank,daily)
+                    if(data == null){
+                        const data = await getMovie(rank, daily)
+                        res.json(data)
+                    }else{
+                        res.json(data)
+                    }
+                }
+                catch{
+                    res.send("해당일에 데이터가 없습니다.")
+                }
             }
         }
         else{
-            res.send("YYYYMMDD형식에 맞추어 보내주세요")
+            res.send("0~9 범위내로 보내주세요")
         }
+    }   
+    else{
+        res.send("해당일에 데이터가 없습니다. YYYYMMDD/0~9형식으로 보내주세요")
     }
-    catch{
-        res.send("없는주소입니다.")
-    }
-    }
+}
 
 
 module.exports = {readMovie}
-
-// /**
-//  * 데이터가 있는지 확인하고 없으면 만들어서 반환, 있으면 반환해주는함수
-//  * @param {*} date YYYYMMDD 형태의 8자리
-//  * @returns 데이터를 보낸다.
-//  */
-// const confirmMovie = async (date) => {
-//     const checkDate = getDate(date)
-//     const checkData = await checkRank(checkDate)
-//     if(checkData){
-//         let result = await getRank(checkDate)
-//         return result
-//     }
-//     else{
-//         await saveRank(checkDate)
-//         let data = await getRank(checkDate)
-//         return data
-//     }
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-// module.exports.getmovie2 = async (req, res) => {
-
-
-// var client_id = process.env.client_id
-// var client_secret = process.env.RTrGTdMG1i
-// var api_url = 'https://openapi.naver.com/v1/search/blog?query='
-// // + encodeURI(req.query.query); // JSON 결과
-// var request = require('request');
-// var options = {
-//     url: api_url,
-//     headers: {'X-Naver-Client-Id':client_id, 'X-Naver-Client-Secret': client_secret}
-// };
-//    request.get(options, function (error, response, body) {
-//     console.log(response.statusCode)
-//      if (!error && response.statusCode == 200) {
-//        console.log(response)
-//         console.log(body)
-//        res.writeHead(200, {'Content-Type': 'text/json;charset=utf-8'});
-//        res.end(body);
-//      } else {
-//     //    res.status(response.statusCode).end();
-//     console.log(res.statusCode)
-//     //    console.log('error = ' + response.statusCode);
-//      }
-//    });
-//  }
-
-// module.exports.getmovie = async (req, res) => {
-//     let yesterday = getYesterday();
-//     const rankResult = await Rank.exists({ daily : {$eq:yesterday }});
-
-//     try{
-//         if(rankResult){
-//             let result = await Rank.findOne({ daily : yesterday }, {_id:false, __v:false});
-//             res.send(result);
-//         } 
-//         else{
-//             await createYesterdayRank();
-//             let result = await Rank.findOne({ daily : yesterday }, {_id:false, __v:false});
-//             res.send(result);
-//         }
-//     }
-//     catch(err){
-//         console.log(err);
-//         res.send("server errorcode : 500");
-//     }
-// }
-
-
-  
-// module.exports.find = async (req, res) => {
-// try {
-//     const { daily } = req.params;
-
-//     // req.params.daily가 있을 시 해당 날짜의 ranking 정보를 리턴한다.
-//     if (daily) {
-//     // dailt가 일치하는 rank object 하나 찾는다.
-//     const rank = await Rank.findOne({ daily });
-
-//     // 해당 유저 정보가 존재하지 않으면 404를 리턴한다.
-//     if (!rank) return res.status(404).send("ranking not found");
-//     return res.send(rank);
-//     }
-// } catch (err) {
-//     return res.status(500).send(err);
-// }
-// };
-
-// module.exports.findrank = async (req, res) => {
-//     try {
-//         const { daily, rank } = req.params;
-        
-//         // req.params.daily가 있을 시 해당 날짜의 ranking 정보를 리턴한다.
-//         if (daily) {
-//         // dailt가 일치하는 rank object 하나 찾는다.
-//         const day_rank = await Rank.findOne({ daily });
-//         target_rank = day_rank.ranking[rank-1]
-        
-//         // 해당 rank 정보가 존재하지 않으면 404를 리턴한다.
-//         if (!rank) return res.status(404).send("ranking not found");
-//         return res.send(target_rank);
-//         }
-//         // // req.params.rank가 없으면 모든 유저 정보를 리턴한다.
-//         // const ranks = await Rank.find({});
-//         // return res.send(ranks);
-//     } catch (err) {
-//         return res.status(500).send(err);
-//     }
-//     };
-
-// module.exports.create = async (req, res) => {
-//     try {
-//         const { daily, ranking } = req.body;
-//         // 새로운 rank 도큐먼트를 생성 후 저장
-//         const new_rank = new Rank({ daily, ranking });
-    
-//           await new_rank.save();
-//           return res.send("저장됨");
-//         } catch (err) {
-//           return res.status(500).send(err);
-//         }
-//     };
-
-
-//   module.exports.remove = async (req, res) => {
-//     try {
-//       const { userId } = req.params;
-//       // userId를 가진 유저 정보를 찾는다.
-//       const user = await User.findOne({ userId });
-  
-//       // userId를 가진 유저가 없으면 404를 리턴한다.
-//       if (!user) return res.status(404).send("user not found");
-  
-//       // 유저 정보를 삭제한다.
-//       await user.remove();
-//       return res.send();
-//     } catch (err) {
-//       return res.status(500).send(err);
-//     }
-//   };
