@@ -41,13 +41,12 @@ function getDate(date){
 const checkDaily = (req) => {
     const result = moment(req, "YYYYMMDD", "ture").isValid()
     const checkday = today()
-    if(result && Number(req) <= checkday && Number(req) >= 20100101 ){
+    if(result && Number(req) <= Number(checkday) && Number(req) >= 20100101 ){
         return true}
     else{
         return false
         } 
 }
-
 
 
 ////////
@@ -82,6 +81,7 @@ const getKobisUrl = (date) => {
 const getKobisDailyRankData = async(date) => {
     const requrl = getKobisUrl(date)
     try{
+    console.log("kobis 요청발생")
     const response = await fetch(requrl)
     let result = response.json()
     return result
@@ -283,9 +283,15 @@ const confirmRank = async (date) => {
 const readRank = async(req, res) => { 
     const {daily} = req.params
     let data = ""
-
+    let date = getDate(daily)
     if(checkDaily(daily)){
-        let date = getDate(daily)
+        if(daily == today()){
+            date = getDate(daily-1)
+        }
+        else{
+            date = getDate(daily)
+        }
+
         data = await confirmRank(date)
         try{
             if(data == null){
@@ -308,4 +314,4 @@ const readRank = async(req, res) => {
 
 
 
-module.exports = {readRank}
+module.exports = {readRank, confirmRank, saveRank}

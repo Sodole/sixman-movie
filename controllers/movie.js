@@ -6,7 +6,7 @@ const fetch = require("node-fetch");
 const { model } = require("mongoose");
 require("dotenv").config(); 
 moment.tz.setDefault('Asia/Seoul')
-const conRank = require("./rank")
+const rank = require("./rank")
 
 ////////
 // 날짜 관련함수
@@ -45,9 +45,12 @@ const checkDaily = (req) => {
     const result = moment(req, "YYYYMMDD", "ture").isValid()
     const checkday = today()
     if(result && Number(req) <= checkday && Number(req) >= 20100101 ){
-        return true}
+        const date = getDate(req)
+        return date
+    }
     else{
-        return false
+        const date = getDate() -1
+        return date
         } 
 }
 
@@ -78,11 +81,23 @@ const getKobisUrl = (movieCd) => {
  * @returns 일자에 맞는 데이터 반환 
  */
 const getRank = async (date) => {
-        const checkDate = getDate(date)
-        const rankResult = await Rank.DailyRank.findOne({ daily : checkDate }, {_id:false, __v:false});
-        return rankResult
+    const checkDate = checkDaily(date)
+    const rankResult = await Rank.DailyRank.exists({daily : {$eq:checkDate}})
+    if(rankResult){
+        const Result = await Rank.DailyRank.findOne({ daily : checkDate }, {_id:false, __v:false});
+        return Result
+    }else{
+        try{
+        await rank.saveRank(checkDate)
+        }catch (err){
+            return console.log(err)
+        }finally{
+            const result = await Rank.DailyRank.findOne({ daily : checkDate }, {_id:false, __v:false});
+            return await result
+        }
+        
     }
-
+}
 
 
 ////////
@@ -143,6 +158,7 @@ const getMovieUrl = async(date) =>{
 const getMovieData = async(num, date = today() ) =>{
     const movieUrl = await getMovieUrl(date)
     const reqUrl = movieUrl[num]
+    console.log("kobis 요청발생")
     const response = await fetch(reqUrl)
     const result = response.json()
     return result
@@ -175,6 +191,7 @@ const getTMDBUrl = (title) => {
  */
 const getTMDBData = async(title) =>{
     const movieUrl = getTMDBUrl(title)
+    console.log("tmdb 요청발생")
     const response = await fetch(movieUrl)
     const result = response.json()
     return result
@@ -210,8 +227,9 @@ const getTMDBDataSet = async(title) =>{
  */
 const createMovieData = async(num, date = today()) =>{
     const movieData = await getMovieData(num, date)
-    const finalData = movieData["movieInfoResult"]["movieInfo"]
-    const title = finalData["movieNm"]
+    console.log(movieData)
+    const finalData = await movieData["movieInfoResult"]["movieInfo"]
+    const title = await finalData["movieNm"]
     let updateDt = getDate(date)
     const tmdbDataDummy = await getTMDBDataSet(title)
     let movieSet = {
@@ -234,19 +252,6 @@ const createMovieData = async(num, date = today()) =>{
         updateDate : updateDt
     }
     return movieSet
-}
-
-
-
-/**
- * movie의 dataset을 받아서 저장하는함수
- * @param {*} num rank의 순번
- * @param {*} date YYYYMMDD 형태의 8자리
- */
-const saveMovie = async(num, date = today()) =>{
-    const data = await createMovieData(num, date)
-    const newMovie = new Movie.Movie(data)
-    newMovie.save()
 }
 
 
@@ -287,41 +292,58 @@ const getMovie = async (num, date) => {
         return rankResult
     }
 
+/**
+ * movie의 dataset을 받아서 저장하는함수
+ * @param {*} num rank의 순번
+ * @param {*} date YYYYMMDD 형태의 8자리
+ */
+const saveMovie = async(num, date = today()) =>{
+    const checkResult = await checkMovie(num, date)
+    if(checkResult){
+        return
+    }
+    else{
+        const data = await createMovieData(num, date)
+        const newMovie = new Movie.Movie(data)
+        newMovie.save()
+    }    
+}
+
+
 
 
 const readMovie = async(req, res) => {
     const {daily, rank} = req.params
+    let date = getDate(daily)
     if(checkDaily(daily)){
         if(rank < 10){
-        const checkMovies = await checkMovie(rank, daily)
+            if(daily == today()){
+                date = getDate(daily-1)
+            }
+            else{
+                date = getDate(daily)
+            }
+    
+        const checkMovies = await checkMovie(rank, date)
             if(checkMovies){
-                const data = await getMovie(rank, daily)
+                const data = await getMovie(rank, date)
                     res.json(data)
-                
-                const userRating = data["userRating"]
-                const movieCode = data["movieCode"]
-                const newData = await createMovieData(rank,daily)
-                if(userRating != newData["userRating"]){
-                    try{
-                        Movie.Movie.replaceOne({movieCode:{$eq:movieCode}}, newData)
-                    }
-                    catch{
-                    }
-                }
             }
             else{
                 try{
-                const data = await createMovieData(rank,daily)
+                // const data = await createMovieData(rank,date)
                 await saveMovie(rank,daily)
-                    if(data == null){
-                        const data = await getMovie(rank, daily)
+                const data = await getMovie(rank, date)
+                    if(data==null){
                         res.json(data)
-                    }else{
+                    }    
+                    else{
                         res.json(data)
                     }
                 }
-                catch{
-                    res.send("해당일에 데이터가 없습니다.")
+                catch (err){
+                    console.log(err)
+                    res.send("해당 데이터가 없습니다.")
                 }
             }
         }
