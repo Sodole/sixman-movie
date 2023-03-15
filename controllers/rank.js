@@ -6,19 +6,22 @@ require('moment-timezone');
 moment.tz.setDefault('Asia/Seoul')
 
 
-//일자관련함수 
+////////
+// 날짜 관련함수
+////////
 
 /**
- * 오늘 알자 반환 함수
+ * 오늘 일자 반환
  * @returns YYYYMMDD형태의 오늘일자 반환
  */
 function today(){
     return moment().format("YYYYMMDD")
   };
 
+
 /**
- * 일자를 반환하는 함수(default = 어제일자)
- * @param {number} date YYYYMMDD 형태의 8자리
+ * 특정일자를 반환하거나 변수가 없을경우 defalut 일자를 반환한다.
+ * @param {*} date YYYYMMDD 형태의 8자리
  * @returns YYYYMMDD형태의 8자리
  */
 function getDate(date){
@@ -30,16 +33,34 @@ function getDate(date){
 }
 
 
-// 요청Url관련 함수들
+/**
+ * 요청일자가 올바른 형태인지 확인하는 함수
+ * @param {number} req YYYYMMDD 형태의 8자리
+ * @returns 형식이 아니면 false 반환
+ */
+const checkDaily = (req) => {
+    const result = moment(req, "YYYYMMDD", "ture").isValid()
+    const checkday = today()
+    if(result && Number(req) <= Number(checkday) && Number(req) >= 20100101 ){
+        return true}
+    else{
+        return false
+        } 
+}
 
+
+////////
+// 요청Url 관련 함수
+////////
 
 /**
  * kobis(한국영상진흥원) 요청 Url 함수(key포함)
- * @param {number} date YYYYMMDD 형태의 8자리
+ *  *요청일데이터는 요청시 데이터의 일자를 조회해야한다.
+ * @param {*} date YYYYMMDD 형태의 8자리
  * @returns 요청일자를 적용한 Url 반환
  */
 const getKobisUrl = (date) => {
-    let targetDt = getDate(date) -1
+    let targetDt = getDate(date)
     reqURL = 'http://www.kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json'
     const kobisApiKey = process.env.KOFIC_API_KEY
     const kobisurl = `${reqURL}?key=${kobisApiKey}&targetDt=${targetDt}`;
@@ -47,45 +68,99 @@ const getKobisUrl = (date) => {
 }
 
 
-// 데이터 요청관련 함수
-
-// /**
-//  * Apiurl을 넣으면 요청한 url의 데이터를 json으로 파싱해준다(비동기)
-//  * @param {string} url 요청시 scretkey를 포함한 url이 필요 
-//  * @returns 요청한 rul의 값을 json형태로 변환해서 전달해준다
-//  * 사용시 async함수에 url을 넣어서 await로 값을 반환해서 사용 추천
-//  */
-// const openApiData = async(url) => {
-//     const requrl = url
-//     const response = await fetch(requrl)
-//     let result = response.json()
-//     return result
-// }
+////////
+// kobis 데이터 요청관련 함수
+////////
 
 /**
- * kobis(한국영상진흥원) 요청일자 데이터 반환 함수
- * @param {number} date YYYYMMDD 형태의 8자리
- * @returns 요청일자 data 반환
+ * kobis(한국영상진흥원) 요청일자의 랭킹 데이터 반환
+ * 반환된 데이터를 json형태로 변환한다.
+ * @param {*} date YYYYMMDD 형태의 요청일자
+ * @returns 요청일자의 랭킹 데이터 반환
  */
-const getKobisData = async(date) => {
+const getKobisDailyRankData = async(date) => {
     const requrl = getKobisUrl(date)
+    try{
+    console.log("kobis 요청발생")
     const response = await fetch(requrl)
     let result = response.json()
     return result
+    }catch (err){
+        return "kobis서버에서 error가 발생하였습니다. 나중에 다시 시도해주세요"
+    }
 }
 
+
+/**
+ * kobisDB의 데이터 업데이트 현황을 파악하는 함수
+ * @param {*} data YYYYMMDD 형태의 요청일자
+ * @returns 해당일자의 데이터가 있으면 true 없으면 flase반환
+ */
+const confirmKobisDB = async(data) =>{
+    let kobisData = data
+    let rankData = kobisData['boxOfficeResult']['dailyBoxOfficeList']
+    if (rankData.length !=0){
+        return true
+    }
+    else {
+        return false
+    }
+}
+
+
+/**
+ * kobis(한국영상진흥원) 요청일자의 랭킹 데이터 반환
+ * 요청데이터의 일자의 정보가 없다면 전일자의 데이터를 반환한다.
+ * @param {*} date YYYYMMDD 형태의 요청일자
+ * @returns 요청일자의 랭킹 데이터 반환 or 전일일자 데이터 반환
+ */
+const getKobisData = async(date) => {
+    const kobisData = await getKobisDailyRankData(date)
+    const confirmKobis = await confirmKobisDB(kobisData)
+
+    let daily = kobisData['boxOfficeResult']["showRange"]
+    let rankData = kobisData['boxOfficeResult']['dailyBoxOfficeList']
+
+    if (confirmKobis){
+        dataset ={
+            daily : daily,
+            rankData : rankData
+            }
+            return dataset
+
+    }else{
+        let fixDate = date-1
+        const fixData = await getKobisDailyRankData(fixDate)
+        daily = fixData['boxOfficeResult']["showRange"]
+        rankData = fixData['boxOfficeResult']['dailyBoxOfficeList']
+
+        dataset = {
+            daily : daily,
+            rankData : rankData
+        }
+        return dataset
+    }
+}
+
+
+
+////////
 // db관련 함수
+////////
+
 
 /**
  * Rank Top10을 만들고 ranking에 들어갈 배열로 만들어준다.
- * @param {number} date YYYYMMDD 형태의 8자리
+ * @param {number} date YYYYMMDD 형태의 요청일자
  * @returns ranking의 들어갈 배열로 반환
+ * ranking이 업데이트 되지않았을시 업데이트 되지 않았다는 문자열 return
  */
 const getRankSet = async(date) => {
     const data = await getKobisData(date)
-    let rankData = data['boxOfficeResult']['dailyBoxOfficeList']
-    let rankSet = []
+    const rankData  = data["rankData"]
+    const daily = data["daily"]
 
+    let rankSet = []
     for (let i = 0; i < rankData.length; i++) {
         let rank = new Rank.Rank
         rank = {
@@ -95,7 +170,12 @@ const getRankSet = async(date) => {
         }
         rankSet.push(rank)
         }
-        return rankSet
+
+    let resultSet = {
+        daily : daily,
+        rankSet : rankSet
+    }
+    return resultSet
     }
 
 
@@ -104,17 +184,18 @@ const getRankSet = async(date) => {
  * @param {number} date YYYYMMDD 형태의 8자리
  * @returns 요청일자의 data를 저장할형태로 만들어준다
  */
-const createRank = async(date) => {
-    const targetDt = getDate(date)
+const createRankForm = async(date) => {
     const data = await getRankSet(date)
+    const targetDt = data["daily"].slice(0,8);
+    const dataSet = data["rankSet"]
     let dailyRank = {
-            daily : targetDt,
-            ranking : data
+            daily : Number(targetDt),
+            ranking : dataSet
         }
     return dailyRank
     }
+
    
-    
 
 /**
  * 가공한 데이터를 dailyrank에 저장해주는 함수
@@ -122,9 +203,9 @@ const createRank = async(date) => {
  * mongoDB에 데이터를 저장한다.
  */
 const saveRank = async (date) => {
-    const data = await createRank(date)
-    const daily = new Rank.DailyRank(data)
-    daily.save()
+    const data = await createRankForm(date)
+    const dailyRank = new Rank.DailyRank(data)
+    dailyRank.save()
 }
 
 
@@ -140,20 +221,6 @@ const checkRank = async(date) => {
 }
 
 
-/**
- * 일자가 올바른 형태인지 확인하는 함수
- * @param {number} req YYYYMMDD 형태의 8자리
- * @returns 형식이 아니면 false 반환
- */
-const checkDaily = (req) => {
-    const result = moment(req, "YYYYMMDD", "ture").isValid()
-    const checkday = today()
-    if(result && Number(req) <= checkday && Number(req) >= 20100101 ){
-        return true}
-    else{
-        return false
-        } 
-}
 
 /**
  * Rank를 한개 읽어오는 함수
@@ -168,7 +235,8 @@ const getRank = async (date) => {
 
 
 /**
- * 데이터가 있는지 확인하고 없으면 만들어서 반환, 있으면 반환해주는함수
+ * 데이터가 있는지 확인하고 없으면 새로운 데이터의 확인 및
+ * 새로운 데이터가 있으면 만들어서 반환, 없으면 전일자 확인 반환해주는함수
  * @param {*} date YYYYMMDD 형태의 8자리
  * @returns 데이터를 보낸다.
  */
@@ -180,25 +248,50 @@ const confirmRank = async (date) => {
         return result
     }
     else{
-        await saveRank(checkDate)
-        let data = await getRank(checkDate)
-        return data
+        let kobisData = await getKobisDailyRankData(checkDate)
+        let confirmData = await confirmKobisDB(kobisData)
+        if(confirmData){
+            await saveRank(checkDate)
+            let result = await getRank(checkDate)
+            return result
+        }else{
+            let confirmDate = checkDate -1
+            let confirmData = await checkRank(confirmDate)
+            if(confirmData){
+                let result = await getRank(confirmDate)
+                return result
+            }else{
+                await saveRank(confirmDate)
+                let result = await getRank(confirmDate)
+                return result
+            }
+        }
     }
 }
 
 
+
+////////
+// route 관련 함수
+////////
 /**
  * 요청에 대한 Rank를 반환해준다.
  * route에 연결할 함수이다.
  * @param {*} req daily 유무에 따라
  * @param {*} res
  */ 
-const readRank = async(req, res) => {
+const readRank = async(req, res) => { 
     const {daily} = req.params
     let data = ""
-
+    let date = getDate(daily)
     if(checkDaily(daily)){
-        let date = getDate(daily)
+        if(daily == today()){
+            date = getDate(daily-1)
+        }
+        else{
+            date = getDate(daily)
+        }
+
         data = await confirmRank(date)
         try{
             if(data == null){
@@ -220,25 +313,5 @@ const readRank = async(req, res) => {
 }
 
 
-// module.exports.findRank = async (req, res) => {
-//     let { daily } = req.params;
-//     daily = Number(daily)
-//     const rankResult = await Rank.exists({ daily : {$eq: daily }});
-//     try{
-//         if(rankResult){
-//             let result = await Rank.findOne({ daily : daily }, {_id:false, __v:false});
-//             res.send(result);
-//         } 
-//         if(!rankResult){
-//             await createdDailyRank(daily);
-//             let result = await Rank.findOne({ daily :daily }, {_id:false, __v:false});
-//             res.send(result);
-//         }
-//     }
-//     catch(err){
-//         console.log(err);
-//         res.send("server errorcode : 500");
-//     }
-// }
 
-module.exports = {readRank}
+module.exports = {readRank, confirmRank, saveRank}
