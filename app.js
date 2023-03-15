@@ -7,6 +7,8 @@ const mongoose = require('mongoose')
 
 const routeRouter = require('./routes/route');
 
+const {swaggerUi, specs} = require("./swagger")
+
 
 const app = express();
 
