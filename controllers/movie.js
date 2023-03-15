@@ -230,7 +230,6 @@ const createMovieData = async(num, date = today()) =>{
     console.log(movieData)
     const finalData = await movieData["movieInfoResult"]["movieInfo"]
     const title = await finalData["movieNm"]
-    let updateDt = getDate(date)
     const tmdbDataDummy = await getTMDBDataSet(title)
     let movieSet = {
         movieCode : finalData["movieCd"],
@@ -249,7 +248,6 @@ const createMovieData = async(num, date = today()) =>{
         genreIds : tmdbDataDummy["genreIds"],
         userRating : tmdbDataDummy["voteAverage"],
         posterUrl : tmdbDataDummy["posterUrl"],
-        updateDate : updateDt
     }
     return movieSet
 }
