@@ -11,7 +11,7 @@ const options = {
         servers:[
             {url: "https://port-0-sixman-movie-r8xoo2mlenkvdnc.sel3.cloudtype.app/"}
         ],
-        host:"localhost:3000",
+        host: "port-0-sixman-movie-r8xoo2mlenkvdnc.sel3.cloudtype.app",
         basePath:"/"
     },
     apis:["routes/*.js"]
