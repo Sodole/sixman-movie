@@ -88,14 +88,12 @@ const getRank = async (date) => {
         return Result
     }else{
         try{
-        await rank.saveRank(checkDate)
+        let newDate = getDate(date-1)
+        const result = await Rank.DailyRank.findOne({ daily : newDate }, {_id:false, __v:false});
+        return await result
         }catch (err){
             return console.log(err)
-        }finally{
-            const result = await Rank.DailyRank.findOne({ daily : checkDate }, {_id:false, __v:false});
-            return await result
         }
-        
     }
 }
 
