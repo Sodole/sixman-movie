@@ -25,7 +25,6 @@ const MovieSchema = mongoose.Schema({
   genreIds : [Number],
   userRating : {type:Number},
   posterUrl : {type:String},
-  updateDate : {type:Number}
 });
 
 // 모델의 이름과 스키마를 이용해 모델의 정의함.
